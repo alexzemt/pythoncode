@@ -1,0 +1,215 @@
+import typing as tp
+from sympy.ntheory import factorint
+from sympy import isprime
+from math import floor, ceil
+
+'''
+def fast_power(value: int, modulus: int, power: int) -> int:
+    """:raises a number a to some power"""
+    if power == 0:
+        return 1
+    return ((fast_power(value, modulus, power // 2) ** 2) * value ** (power % 2)) % modulus
+'''
+
+def fast_power(value: int, modulus: int, power: int) -> int:
+    """:raises a number a to some power"""
+    result = 1  # power of the value up to the lowest k bits
+    current_power = value  # x^{2^k}, where k is the number of the current iteration
+    while power != 0:
+        if power % 2 != 0:
+            result = (result * current_power) % modulus
+        current_power = (current_power ** 2) % modulus
+        power //= 2
+    return result
+
+
+def euler_inv(value: int, modulus: int, phi_p: int) -> int:  # modulus is arbitrary positive integer
+    return fast_power(value, modulus, phi_p - 1)
+
+
+def legandre(value: int, modulus: int) -> bool:
+    if not isprime(modulus) or modulus == 2:
+        raise ValueError('Expected an odd prime number, but got ' + str(modulus))
+    result = value**((modulus - 1) // 2) % modulus
+
+    return not (result == modulus - 1)
+
+
+def df(x: int, modulus: int, power: int) -> int:
+    return (2 * x) % (modulus ** power)  # that is right
+
+
+def f(x: int, value: int, modulus: int, power: int) -> int:
+    return (x ** 2 - value) % (modulus ** power)  # the whole expression should be taken modulo 5^a1
+
+# takes solution CURRENT (mod p^power), returns solution NEXT (mod p^(power + 1))
+
+
+def next_step_for_odd_primes(current: int, value: int, modulus: int, power: int) -> int:
+    assert isprime(modulus), 'expected prime number, got composite ' + str(modulus)
+    # that's it, can write it in one formula
+    return (current - f(current, value, modulus, power + 1) * euler_inv(df(current, modulus, 1), modulus, modulus - 1)) % modulus ** (power + 1)
+
+
+def solvable(value: int, modulus: int, power: int) -> bool:
+    if modulus == 2:
+        if power == 1:
+            return True
+        elif power == 2:
+            return value % 4 in [0, 1]
+        else:
+            return value % 8 in [0, 1]
+    else:
+        return legandre(value, modulus)
+
+
+def first_approximations(value: int, modulus: int) -> tp.List[int]:
+    result = []
+    for x in range(modulus):   # solving x^2 = a (mod p)
+        if f(x, value, modulus, 1) == 0:
+            result.append(x)
+    return result
+
+
+def raise_solution(approx: int, value: int, modulus: int, n: int) -> int:
+    for x in range(1, n):
+        approx = next_step_for_odd_primes(approx, value, modulus, x)
+    return approx
+
+
+def next_step_for_two(value: int, modulus: int, power: int) -> int:  # working modulo 2^n
+    for residue in range(1, modulus**power + 1, 2):
+        if f(residue, value, 2, power) == 0 % 2**power:
+            return residue
+    assert False
+
+
+def calculate_e1(power: int) -> int:
+    value = ((5**power - 1) * euler_inv(2**power, 5**power, 4 * 5 ** (power - 1))) % 5**power
+    return 2**power * value + 1  # e1
+
+
+def calculate_e2(power: int) -> int:
+    b = euler_inv(2**power, 5**power, 4 * 5 ** (power - 1))
+    return 2**power * b  # e2
+
+
+def coprime_solve_modulo_5(value: int, power: int) -> tp.List[int]:  # a is a positive integer and n is a power of 5
+    modulus = 5
+    if not solvable(value, modulus, power):
+        return []
+
+    final_answers_modulo_5 = []  # final answers modulo 5^n
+    firstapproximations = first_approximations(value, modulus)  # list of the first approximations
+
+    for el in firstapproximations:
+        final_answers_modulo_5.append(raise_solution(el, value, modulus, power))
+
+    return final_answers_modulo_5
+
+
+def not_coprime_solve_modulo_5(value, power):
+    final_answers_not_coprime_modulo_5 = []
+    if value % 5**power == 0:
+        for s in range(0, 5**(floor(power / 2))):
+            final_answers_not_coprime_modulo_5.append(s * 5**(ceil(power / 2)))
+    else:
+        value %= 5**power
+        count_degree_of_5 = 0
+        while value % 5 == 0:
+            value = value // 5
+            count_degree_of_5 += 1
+        if not legandre(value, 5) or count_degree_of_5 % 2 == 1:
+            return []
+        else:
+            coprime_solutions = coprime_solve_modulo_5(value, power - count_degree_of_5)
+            intermidiate_solutions = [residue * 5**(count_degree_of_5 // 2) for residue in coprime_solutions]
+            for element in intermidiate_solutions:
+                t = round((5**power - element)/(5**(power - count_degree_of_5//2)))
+                for q in range(0, t+1):
+                    final_answers_not_coprime_modulo_5.append((element + q * 5**(power - (count_degree_of_5 // 2))) % 5**power)
+    return sorted(set(final_answers_not_coprime_modulo_5))
+
+
+def coprime_solve_modulo_2(value: int, power: int) -> tp.List[int]:
+    """solves x^2 - value = 0 (mod 2^power) for value coprime to 2"""
+    final_answers_modulo_2 = []  # the list, where our solutions modulo 2^n are going to be collected
+    if solvable(value, 2, power):
+        for j in range(1, 2**power + 1, 2):  # going through the reduced residue system and checking each element
+            if f(j, value, 2, power) == 0:  # in particular, if el^2 - 1 = 0 (mod 2^n)
+                final_answers_modulo_2.append(j)  # if the number is the desired one, we add it to the list of solutions
+        return final_answers_modulo_2
+    else:
+        return final_answers_modulo_2
+
+
+def not_coprime_solve_modulo_2(value, power):
+    """solves x^2 - value = 0 (mod 2^power) for value not coprime to 2"""
+    final_answers_not_coprime_modulo_2 = []
+    if value % 2**power == 0:
+        for s in range(0, 2**(floor(power / 2))):
+            final_answers_not_coprime_modulo_2.append(s * 2**(ceil(power / 2)))
+    else:
+        value %= 2**power
+        count_degree_of_2 = 0
+        while value % 2 == 0:
+            value = value // 2
+            count_degree_of_2 += 1
+        if not solvable(value, 2, power) or count_degree_of_2 % 2 == 1:
+            return []
+        else:
+            coprime_solutions = coprime_solve_modulo_2(value, power - count_degree_of_2)
+            intermidiate_solutions = [residue * 2**(count_degree_of_2 // 2) for residue in coprime_solutions]
+            for q in range(0, power + 1):
+                for element in intermidiate_solutions:
+                    final_answers_not_coprime_modulo_2.append((element + q * 2**(power - (count_degree_of_2 // 2))) % 2**power)
+    return sorted(set(final_answers_not_coprime_modulo_2))
+
+
+
+
+def solve_modulo_5(value, power):
+    '''
+solves for any value and any power
+    '''
+    if value % 5 == 0:
+        return not_coprime_solve_modulo_5(value, power)
+    else:
+        return coprime_solve_modulo_5(value, power)
+
+
+def solve_modulo_2(value, power):
+    """solves x^2 = value (mod 2^power)  for any value and any power"""
+    if value % 2 == 0:
+        return not_coprime_solve_modulo_2(value, power)
+    else:
+        return coprime_solve_modulo_2(value, power)
+
+
+def solve_modulo_10(value, power):
+    e1 = calculate_e1(power)
+    e2 = calculate_e2(power)
+    results = []
+    if len(solve_modulo_2(value, power)) != 0 and len(solve_modulo_5(value, power)) != 0:
+        for el in solve_modulo_2(value, power):
+                for it in solve_modulo_5(value, power):
+                    results.append((el * e1 + it * e2) % 10 ** power)
+    return results
+    
+
+
+print('Motivation: solving x^2 = a (mod 10^n)')
+value = int(input('Enter a: '))
+# base = int(input("Enter p: "))  # 2, 5 or 10
+base = 10
+power = int(input("Enter the power of " + str(base) + ": "))
+if power <= 0:
+    raise ValueError ('The power of 10 must be grater than 0')
+modulus = base**power
+solutions = sorted(solve_modulo_10(value, power))
+if len(solutions) != 0:
+    #print('Solutions: ', *sorted(solutions))
+    for sol in solutions:
+        print(str(sol)+'^2 =', sol**2)
+else:
+    print('No solutions')
