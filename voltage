@@ -1,0 +1,18 @@
+amp = int(input()) #максимальное значение тока(на предохранителе)
+voltage = int(input()) #действующее значение напряжения
+b=list(map(int, input().split())) #значение мощностей N-количества электроприборов в комнате
+size = len (b)
+summ = 0
+for i in range(size):
+    summ = summ + b[i]/voltage
+print(summ, "А - общий ток на электроприборах") #общее значение тока
+if summ < amp or summ == amp:
+    m = 1 #число линий в комнате
+if summ > amp:
+    if summ%amp==0: #общий ток равен максимальному
+        m = summ/amp
+    if summ%amp>0: #общий ток больше максимального
+        m = summ/amp
+        import math
+        m = math.ceil(m)
+print(m, "лин. в комнате")
