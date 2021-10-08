@@ -8,6 +8,7 @@ import glob
 import sys, os
 
 
+
 def get_articles_from_blob(folder: str):
     data = []
     for path in glob.glob(folder + os.sep + "*"):
